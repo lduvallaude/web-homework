@@ -4,6 +4,7 @@ body {
     margin: 0;
     padding: 0;
 }
+
  
 .container {
     max-width: 800px;
@@ -12,13 +13,64 @@ body {
     padding: 40px;
     box-shadow: 0 5px 20px rgba(0,0,0,0.1);
     border-radius: 10px;
+    display : grid;
+    grid-template-columns:
+        1fr 1fr 1fr 1fr;
+    grid-template-areas:
+        "header header header header"
+        "contact contact contact contact"
+        "profil profil profil profil"
+        "formation formation formation formation"
+        "distinctions distinctions distinctions distinctions"
+        "langues langues langues langues "
+        "competences competences competences competences"
+        "divers divers divers divers"; 
 }
+
+@media only screen and (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-areas:
+            "header header header"
+            "contact contact contact"
+            "profil profil profil"
+            "formation formation formation"
+            "distinctions distinctions distinctions"
+            "langues competences divers";
+    }
+}
+
+#formation {
+    grid-area: formation;
+}
+
+#distinctions {
+    grid-area: distinctions;
+}
+
+#langues {
+    grid-area: langues;
+}
+
+#competences {
+    grid-area: competences;
+}
+
+#divers {
+    grid-area: divers;
+}
+
+#profil {
+    grid-area: profil;
+}
+
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 30px;
+    grid-area: header;
 }
 
 .header-text {
@@ -30,6 +82,7 @@ body {
     height: 140px;
     object-fit: cover;
     border: 2px solid #0056b3;
+    
 }
 
 
@@ -53,6 +106,10 @@ li {
     margin-bottom: 10px;
 }
 
+.contact {
+    grid-area: contact;
+}
+
 .contact p {
     margin: 5px 0;
 }
@@ -61,4 +118,5 @@ li {
     color: #888;
     font-size: 0.9em;
 }
+
 
