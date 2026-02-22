@@ -1,0 +1,65 @@
+#main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#grid {
+    margin: 10px 0 100px 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+}
+
+#grid > div {
+  width: 100px;
+  height: 100px;
+  margin: 0px;
+  background-color: rgb(255, 255, 255);
+  border: 1px solid rgb(0, 0, 0);
+}
+
+/* si on fait sans le pseudo-élément, on remplace la case par le cercle (pas 
+satisfaisant visuellement*/
+
+.circle {
+  position: relative;
+}
+
+.circle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 6px solid blue; 
+  background: transparent; 
+  transform: translate(-50%, -50%);
+}
+
+.cross {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.cross::before,
+.cross::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 8px;
+  background: red;
+  transform-origin: center;
+}
+
+.cross::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.cross::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
