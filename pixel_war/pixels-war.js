@@ -11,6 +11,8 @@ document.addEventListener("DOMContentLoaded",
 
         let MAP_ID = "TEST"
         let API_KEY = undefined
+
+        // dimensions courantes de la carte
         let CURRENT_NI = 0
         let CURRENT_NJ = 0
 
@@ -37,13 +39,14 @@ document.addEventListener("DOMContentLoaded",
             console.log(`Map ${name} added to the dropdown`)
         }
 
+        // connect
         async function connect(event) {
-            // 1. récupère la carte choisie
+            // 1. récupère la carte choisie dans le dropdown
             MAP_ID = document.getElementById("mapid-input").value
             console.log(`Connecting to map ${MAP_ID}...`)
 
             // 2. envoie /init pour cette carte
-            const init_response = await fetch(`/api/v2/${MAP_ID}/init`, {
+            const init_response = await fetch(`/api/v2/maps/${MAP_ID}/init`, {
                 method: "GET",
                 credentials: "include",
             })
@@ -73,15 +76,17 @@ document.addEventListener("DOMContentLoaded",
             refreshInterval = setInterval(() => refresh(), 2000)
         }
 
-        document.getElementById("connect-button").addEventListener("click", connect)
+        // attache connect au bouton Connect
+        document.getElementById("connect-btn").addEventListener("click", connect)
 
+        // draw_map
         function draw_map(ni, nj, data) {
             const grid = document.getElementById("grid")
 
-            // on nettoie l'ancienne carte
+            // nettoie l'ancienne carte
             grid.innerHTML = ""
 
-            // on définit le nombre de colonnes CSS
+            // définit le nombre de colonnes CSS
             grid.style.gridTemplateColumns = `repeat(${nj}, 1fr)`
 
             // crée un div par pixel
@@ -134,7 +139,7 @@ document.addEventListener("DOMContentLoaded",
         async function refresh() {
             if (!MAP_ID) return
 
-            const response = await fetch(`/api/v2/${MAP_ID}/deltas`, {
+            const response = await fetch(`/api/v2/maps/${MAP_ID}/changes`, {
                 method: "GET",
                 credentials: "include",
             })
@@ -150,8 +155,8 @@ document.addEventListener("DOMContentLoaded",
             }
         }
 
-        // attache refresh au bouton Refresh 
-        const refreshBtn = document.getElementById("refresh-button")
+        // attache refresh au bouton Refresh (si présent dans le HTML)
+        const refreshBtn = document.getElementById("refresh-btn")
         if (refreshBtn) {
             refreshBtn.addEventListener("click", () => refresh())
         }
@@ -165,7 +170,7 @@ document.addEventListener("DOMContentLoaded",
 
             const [r, g, b] = getPickedColorInRGB()
 
-            const response = await fetch(`/api/v2/${MAP_ID}/set`, {
+            const response = await fetch(`/api/v2/maps/${MAP_ID}/pixel`, {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -184,7 +189,8 @@ document.addEventListener("DOMContentLoaded",
                 }
                 return
             }
-            
+
+            // mise à jour locale immédiate (pas besoin d'attendre le prochain refresh)
             div.style.backgroundColor = `rgb(${r}, ${g}, ${b})`
 
             // refresh immédiat pour voir les autres changements aussi
