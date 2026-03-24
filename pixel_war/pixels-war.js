@@ -164,7 +164,7 @@ document.addEventListener("DOMContentLoaded",
 
             const [r, g, b] = getPickedColorInRGB()
 
-            const response = await fetch(`/api/v2/maps/${MAP_ID}/set`, {
+            const response = await fetch(`/api/v2/${MAP_ID}/set`, {
                 method: "POST",
                 credentials: "include",
                 headers: {
