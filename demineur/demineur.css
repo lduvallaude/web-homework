@@ -32,6 +32,6 @@
 }
 
 #grid > div.bomb.revealed {
-    background-color: #f44336; /* rouge pour bombes */
+    background-color: #f44336;
     color: white;
 }

@@ -4,7 +4,7 @@ const NUM_BOMBS = 10;
 let squares = [];
 
 function createGrid() {
-    grid.innerHTML = "";
+    grid.innerHTML = ""; // permet de vider la grille avant de la recréer
     squares = [];
     for (let row = 0; row < GRID_SIZE; row++) {
         for (let col = 0; col < GRID_SIZE; col++) {
@@ -20,7 +20,7 @@ function createGrid() {
 function placeBombs() {
     let bombsPlaced = 0;
     while (bombsPlaced < NUM_BOMBS) {
-        const index = Math.floor(Math.random() * squares.length);
+        const index = Math.floor(Math.random() * squares.length); // Math.floor arrondit à l'entier inférieur
         const box = squares[index];
         if (!box.classList.contains("bomb")) {
             box.classList.add("bomb");
@@ -31,7 +31,7 @@ function placeBombs() {
 
 function revealNeighbours(box) {
     const row = +box.dataset.row;
-    const col = +box.dataset.column;
+    const col = Number(box.dataset.column); // Number() (ou +) convertit la chaîne en nombre
 
     if (box.classList.contains("revealed")) return;
 
@@ -47,7 +47,7 @@ function revealNeighbours(box) {
 
     for (let i = row - 1; i <= row + 1; i++) {
         for (let j = col - 1; j <= col + 1; j++) {
-            if (i >= 0 && i < GRID_SIZE && j >= 0 && j < GRID_SIZE) {
+            if (i >= 0 && i < GRID_SIZE && j >= 0 && j < GRID_SIZE) { // on s'assure de ne pas sortir des limites de la grille
                 if (i === row && j === col) continue;
                 const index = i * GRID_SIZE + j;
                 const neighbourBox = squares[index];
