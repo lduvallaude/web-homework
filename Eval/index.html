@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chat</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- Écran de connexion -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>Chat</h1>
+    <p>Choisissez votre utilisateur ou créez-en un</p>
+    <div class="user-chips" id="userChips"></div>
+    <div class="form-row">
+      <label>Ou créer un compte</label>
+      <input type="text" id="newUserName" placeholder="Prénom" />
+      <input type="email" id="newUserEmail" placeholder="Email" style="margin-top:6px" />
+    </div>
+    <button class="btn primary" id="loginBtn" style="width:100%">Rejoindre</button>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app" style="display:none">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h1>Messages</h1>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div class="ws-dot" id="wsDot" title="WebSocket"></div>
+        <button class="icon-btn" id="newConvBtn" title="Nouvelle conversation">+</button>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <input type="text" placeholder="Rechercher…" id="searchInput" />
+    </div>
+    <div class="conv-list" id="convList"></div>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-area">
+    <div class="empty-state" id="emptyState">
+      <div class="icon">💬</div>
+      <p>Sélectionnez une conversation</p>
+    </div>
+
+    <div id="chatView" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+      <div class="chat-header">
+        <div class="avatar" id="chatAvatar">?</div>
+        <div class="info">
+          <div class="name" id="chatName">—</div>
+          <div class="members" id="chatMembers"></div>
+        </div>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="input-area">
+        <div class="input-wrap">
+          <textarea class="msg-input" id="msgInput" rows="1" placeholder="Écrire un message…"></textarea>
+        </div>
+        <button class="send-btn" id="sendBtn">
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouvelle conversation -->
+<div class="modal-bg" id="newConvModal">
+  <div class="modal">
+    <h2>Nouvelle conversation</h2>
+    <div class="form-row">
+      <label>Nom (optionnel, pour un groupe)</label>
+      <input type="text" id="convName" placeholder="Nom du groupe…" />
+    </div>
+    <div class="form-row">
+      <label>Participants (cochez au moins 1 autre)</label>
+      <div id="participantList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelConv">Annuler</button>
+      <button class="btn primary" id="createConvBtn">Créer</button>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar" id="statusBar"></div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentUser = null;
+let currentConv = null;
+let ws = null;
+let allConvs = [];
+let allUsers = [];
+
+// Utils
+function initials(name) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+}
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDay(iso) {
+  const d = new Date(iso);
+  const today = new Date();
+  const diff = Math.floor((today - d) / 86400000);
+  if (diff === 0) return "Aujourd'hui";
+  if (diff === 1) return 'Hier';
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+}
+function toast(msg) {
+  const bar = document.getElementById('statusBar');
+  bar.textContent = msg;
+  bar.classList.add('show');
+  setTimeout(() => bar.classList.remove('show'), 2500);
+}
+async function api(method, path, body) {
+  const r = await fetch(API + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: 'Erreur réseau' }));
+    throw new Error(err.detail || 'Erreur');
+  }
+  return r.json();
+}
+
+// ── Login ──
+async function loadUsers() {
+  try {
+    allUsers = await api('GET', '/users');
+  } catch { allUsers = []; }
+  const chips = document.getElementById('userChips');
+  chips.innerHTML = '';
+  allUsers.forEach(u => {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.textContent = u.name;
+    c.dataset.id = u.id;
+    c.onclick = () => {
+      document.querySelectorAll('.chip').forEach(x => x.classList.remove('selected'));
+      c.classList.add('selected');
+      document.getElementById('newUserName').value = '';
+      document.getElementById('newUserEmail').value = '';
+    };
+    chips.appendChild(c);
+  });
+}
+
+document.getElementById('loginBtn').onclick = async () => {
+  const selected = document.querySelector('.chip.selected');
+  if (selected) {
+    const u = allUsers.find(x => x.id == selected.dataset.id);
+    if (u) { loginAs(u); return; }
+  }
+  const name = document.getElementById('newUserName').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim();
+  if (!name || !email) { toast('Remplissez tous les champs'); return; }
+  try {
+    const u = await api('POST', '/users', { name, email });
+    loginAs(u);
+  } catch(e) { toast(e.message); }
+};
+
+function loginAs(user) {
+  currentUser = user;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+  loadConversations();
+}
+
+// Conversations
+async function loadConversations() {
+  try {
+    allConvs = await api('GET', `/users/${currentUser.id}/conversations`);
+  } catch { allConvs = []; }
+  renderConvList();
+}
+
+function convDisplayName(conv) {
+  if (conv.name) return conv.name;
+  const others = conv.participants.filter(p => p.id !== currentUser.id);
+  return others.map(p => p.name).join(', ') || 'Conversation';
+}
+
+function renderConvList(filter = '') {
+  const list = document.getElementById('convList');
+  list.innerHTML = '';
+  const filtered = allConvs.filter(c =>
+    convDisplayName(c).toLowerCase().includes(filter.toLowerCase())
+  );
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Aucune conversation</div>';
+    return;
+  }
+  filtered.forEach(conv => {
+    const name = convDisplayName(conv);
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (currentConv?.id === conv.id ? ' active' : '');
+    item.innerHTML = `
+      <div class="avatar">${initials(name)}</div>
+      <div class="conv-info">
+        <div class="conv-name">${name}</div>
+        <div class="conv-preview">${conv.participants.length} participant${conv.participants.length > 1 ? 's' : ''}</div>
+      </div>`;
+    item.onclick = () => openConversation(conv);
+    list.appendChild(item);
+  });
+}
+
+document.getElementById('searchInput').oninput = e => renderConvList(e.target.value);
+
+// ── Ouvrir conversation ──
+async function openConversation(conv) {
+  currentConv = conv;
+  renderConvList(document.getElementById('searchInput').value);
+
+  document.getElementById('emptyState').style.display = 'none';
+  const chatView = document.getElementById('chatView');
+  chatView.style.display = 'flex';
+
+  const name = convDisplayName(conv);
+  document.getElementById('chatAvatar').textContent = initials(name);
+  document.getElementById('chatName').textContent = name;
+  document.getElementById('chatMembers').textContent =
+    conv.participants.map(p => p.name).join(' · ');
+
+  connectWS(conv.id);
+  await loadMessages(conv.id);
+}
+
+// ── Messages ──
+async function loadMessages(convId) {
+  const msgs = await api('GET', `/conversations/${convId}/messages?limit=100`);
+  renderMessages(msgs);
+}
+
+function renderMessages(msgs) {
+  const container = document.getElementById('messages');
+  container.innerHTML = '';
+  if (!msgs.length) {
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;margin-top:40px">Commencez la conversation !</div>';
+    return;
+  }
+
+  let lastDay = null;
+  let lastSender = null;
+
+  msgs.forEach(msg => {
+    const day = fmtDay(msg.timestamp);
+    if (day !== lastDay) {
+      const sep = document.createElement('div');
+      sep.className = 'day-sep';
+      sep.innerHTML = `<span>${day}</span>`;
+      container.appendChild(sep);
+      lastDay = day;
+      lastSender = null;
+    }
+
+    const isMe = msg.sender_id === currentUser.id;
+    const senderChanged = lastSender !== msg.sender_id;
+
+    if (senderChanged) {
+      const group = document.createElement('div');
+      group.className = 'msg-group ' + (isMe ? 'me' : 'other');
+      group.dataset.sender = msg.sender_id;
+
+      if (!isMe && senderChanged) {
+        const nameEl = document.createElement('div');
+        nameEl.className = 'msg-sender';
+        nameEl.textContent = msg.sender_name || 'Inconnu';
+        group.appendChild(nameEl);
+      }
+
+      container.appendChild(group);
+      lastSender = msg.sender_id;
+    }
+
+    const group = container.lastElementChild;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = msg.content;
+
+    const time = document.createElement('div');
+    time.className = 'bubble-time';
+    time.style.textAlign = isMe ? 'right' : 'left';
+    time.textContent = fmtTime(msg.timestamp);
+
+    group.appendChild(bubble);
+    group.appendChild(time);
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendMessage(msg) {
+  const container = document.getElementById('messages');
+  const isMe = msg.sender_id === currentUser.id;
+
+  const placeholder = container.querySelector('[style*="Commencez"]');
+  if (placeholder) placeholder.remove();
+
+  const group = document.createElement('div');
+  group.className = 'msg-group ' + (isMe ? 'me' : 'other');
+
+  if (!isMe) {
+    const nameEl = document.createElement('div');
+    nameEl.className = 'msg-sender';
+    nameEl.textContent = msg.sender_name || 'Inconnu';
+    group.appendChild(nameEl);
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = msg.content;
+
+  const time = document.createElement('div');
+  time.className = 'bubble-time';
+  time.style.textAlign = isMe ? 'right' : 'left';
+  time.textContent = fmtTime(msg.timestamp);
+
+  group.appendChild(bubble);
+  group.appendChild(time);
+  container.appendChild(group);
+  container.scrollTop = container.scrollHeight;
+}
+
+// WebSocket
+function connectWS(convId) {
+  if (ws) { ws.close(); ws = null; }
+  const dot = document.getElementById('wsDot');
+
+  try {
+    ws = new WebSocket(`ws://localhost:8000/ws/${convId}/${currentUser.id}`);
+    ws.onopen = () => { dot.classList.add('connected'); };
+    ws.onclose = () => { dot.classList.remove('connected'); };
+    ws.onmessage = e => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'received' && msg.conversation_id === currentConv?.id) {
+        appendMessage(msg);
+      }
+    };
+  } catch(err) {
+    console.warn('WebSocket non disponible:', err);
+  }
+}
+
+// Envoyer un message
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const content = input.value.trim();
+  if (!content || !currentConv) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  try {
+    const msg = await api('POST', '/messages', {
+      content,
+      conversation_id: currentConv.id,
+      sender_id: currentUser.id,
+    });
+    appendMessage({ ...msg, type: 'sent' });
+  } catch(e) { toast(e.message); }
+}
+
+document.getElementById('sendBtn').onclick = sendMessage;
+document.getElementById('msgInput').onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+};
+document.getElementById('msgInput').oninput = function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+};
+
+// Nouvelle conversation
+document.getElementById('newConvBtn').onclick = async () => {
+  const list = document.getElementById('participantList');
+  list.innerHTML = '';
+  allUsers.filter(u => u.id !== currentUser.id).forEach(u => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = u.name;
+    chip.dataset.id = u.id;
+    chip.onclick = () => chip.classList.toggle('selected');
+    list.appendChild(chip);
+  });
+  document.getElementById('newConvModal').classList.add('open');
+};
+
+document.getElementById('cancelConv').onclick = () =>
+  document.getElementById('newConvModal').classList.remove('open');
+
+document.getElementById('createConvBtn').onclick = async () => {
+  const selected = [...document.querySelectorAll('#participantList .chip.selected')];
+  if (!selected.length) { toast('Sélectionnez au moins un participant'); return; }
+  const participantIds = [currentUser.id, ...selected.map(c => +c.dataset.id)];
+  const name = document.getElementById('convName').value.trim();
+  const isGroup = participantIds.length > 2;
+
+  try {
+    const conv = await api('POST', '/conversations', {
+      participant_ids: participantIds,
+      is_group: isGroup,
+      name: name || null,
+    });
+    document.getElementById('newConvModal').classList.remove('open');
+    document.getElementById('convName').value = '';
+    await loadConversations();
+    openConversation(conv);
+    toast('Conversation créée');
+  } catch(e) { toast(e.message); }
+};
+
+// Init
+loadUsers();
+</script>
+</body>
+</html>

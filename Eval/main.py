@@ -1,7 +1,7 @@
 # Bon à savoir :
 # Une requête GET = quelqu’un demande des données à ton API (= moyen pour deux programmes de communiquer entre eux.) via une URL
-
-
+# pour le lancer : cd Eval pip install -r requirements.txt uvicorn main:app --reload
+# index.html clique droit Open with Live Server
 from typing import List, Optional, Dict
 from datetime import datetime
 
@@ -18,7 +18,6 @@ engine = create_engine(DATABASE_URL, echo=False)
 def get_session():
     with Session(engine) as session:
         yield session
-
 
 # Modèles de liaison (Many-to-Many)
 
@@ -60,7 +59,6 @@ class UserUpdate(SQLModel):
     is_active: Optional[bool] = None
 
 # Modèles Conversation
-
 
 class ConversationBase(SQLModel):
     name: Optional[str] = None   # Nom du groupe (None si conversation privée)
@@ -163,6 +161,90 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     SQLModel.metadata.create_all(engine)
+    seed_data()
+
+
+def seed_data():
+    """Insère des contacts et conversations de démo si la DB est vide."""
+    with Session(engine) as session:
+        if session.exec(select(User)).first():
+            return  # Déjà initialisé
+
+        # Contacts
+        alice   = User(name="Alice Martin",   email="alice@demo.com")
+        bob     = User(name="Bob Dupont",      email="bob@demo.com")
+        sara    = User(name="Sara Benali",     email="sara@demo.com")
+        thomas  = User(name="Thomas Leclerc",  email="thomas@demo.com")
+        lea     = User(name="Léa Rousseau",    email="lea@demo.com")
+        session.add_all([alice, bob, sara, thomas, lea])
+        session.commit()
+        for u in [alice, bob, sara, thomas, lea]:
+            session.refresh(u)
+
+        # Conversation Alice-Bob
+        c1 = Conversation(is_group=False)
+        c1.participants = [alice, bob]
+        session.add(c1)
+        session.commit()
+        session.refresh(c1)
+        for content, sender in [
+            ("Salut Bob ! Tu as vu le dernier commit ?", alice),
+            ("Oui ! La route WebSocket fonctionne enfin 🎉", bob),
+            ("On fait une revue de code ce soir ?", alice),
+            ("Carrément, 18h ça te va ?", bob),
+            ("Parfait, à ce soir 👍", alice),
+        ]:
+            session.add(Message(content=content, conversation_id=c1.id, sender_id=sender.id))
+        session.commit()
+
+        # Conversation groupe Dev
+        c2 = Conversation(is_group=True, name="Groupe Dev")
+        c2.participants = [alice, bob, sara, thomas]
+        session.add(c2)
+        session.commit()
+        session.refresh(c2)
+        for content, sender in [
+            ("Bonjour tout le monde !", alice),
+            ("Salut ! On commence le sprint aujourd'hui ?", thomas),
+            ("Oui, j'ai créé les tickets sur Jira", sara),
+            ("Super. Je prends la partie API, qui fait le front ?", bob),
+            ("Je m'en occupe 🙋", alice),
+            ("Cool, on se fait un point à 14h ?", thomas),
+            ("Ça marche pour moi", sara),
+        ]:
+            session.add(Message(content=content, conversation_id=c2.id, sender_id=sender.id))
+        session.commit()
+
+        # Conversation Alice-Sara
+        c3 = Conversation(is_group=False)
+        c3.participants = [alice, sara]
+        session.add(c3)
+        session.commit()
+        session.refresh(c3)
+        for content, sender in [
+            ("Sara, tu peux m'expliquer les WebSockets ?", alice),
+            ("Bien sûr ! C'est une connexion persistante entre le client et le serveur.", sara),
+            ("Donc pas besoin de refaire une requête à chaque message ?", alice),
+            ("Exactement, c'est pour ça que c'est en temps réel ⚡", sara),
+            ("Merci beaucoup !", alice),
+        ]:
+            session.add(Message(content=content, conversation_id=c3.id, sender_id=sender.id))
+        session.commit()
+
+        # Conversation Léa - Thomas
+        c4 = Conversation(is_group=False)
+        c4.participants = [lea, thomas]
+        session.add(c4)
+        session.commit()
+        session.refresh(c4)
+        for content, sender in [
+            ("Thomas, le déploiement est prévu pour quand ?", lea),
+            ("Vendredi si les tests passent", thomas),
+            ("OK je préviens le client alors", lea),
+        ]:
+            session.add(Message(content=content, conversation_id=c4.id, sender_id=sender.id))
+        session.commit()
+
 
 # Routes — Utilisateurs
 
@@ -207,6 +289,7 @@ def update_user(user_id: int, updates: UserUpdate, session: Session = Depends(ge
     session.commit()
     session.refresh(user)
     return user
+
 
 # Routes — Conversations
 
@@ -372,6 +455,7 @@ def delete_message(msg_id: int, session: Session = Depends(get_session)):
     session.delete(msg)
     session.commit()
     return {"message": "Message supprimé"}
+
 
 # WebSocket — Temps réel
 
